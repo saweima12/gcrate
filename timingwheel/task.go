@@ -11,6 +11,11 @@ type Task struct {
 	scheduleTime int64
 	executor     Executor
 	taskId       TaskID
+	slot         *TaskList
+}
+
+func (ta *Task) Equals(other *Task) bool {
+	return ta.taskId == other.taskId
 }
 
 type TaskList struct {
@@ -19,6 +24,6 @@ type TaskList struct {
 
 func NewTaskList() *TaskList {
 	return &TaskList{
-		SafeList: *core.NewGeneric[*Task](),
+		SafeList: *core.New[*Task](),
 	}
 }

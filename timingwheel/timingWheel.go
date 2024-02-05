@@ -21,9 +21,12 @@ type TimingWheel interface {
 
 func New(interval time.Duration, bufSize int) TimingWheel {
 	result := &timingWheel{
-		interval:    interval,
-		stopCh:      make(chan struct{}, 1),
-		execQueueCh: make(chan Executor, bufSize),
+		interval:     interval,
+		taskMap:      make(map[TaskID]*Task),
+		stopCh:       make(chan struct{}, 1),
+		removeTaskCh: make(chan TaskID, 1),
+		addTaskCh:    make(chan *Task, 1),
+		execTaskCh:   make(chan Executor, bufSize),
 	}
 	result.currentTaskId.Store(0)
 	return result
@@ -31,22 +34,28 @@ func New(interval time.Duration, bufSize int) TimingWheel {
 
 type timingWheel struct {
 	interval      time.Duration
+	wheel         *tWheel
 	ticker        *time.Ticker
 	currentTaskId atomic.Uint64
+	mutex         sync.Mutex
+	taskMap       map[TaskID]*Task
 
-	wheel       *tWheel
-	stopCh      chan struct{}
-	execQueueCh chan Executor
-	mutex       sync.Mutex
+	stopCh       chan struct{}
+	addTaskCh    chan *Task
+	execTaskCh   chan Executor
+	removeTaskCh chan TaskID
 }
 
 func (ti *timingWheel) AddTask(delay time.Duration, executor Executor) (TaskID, error) {
 	if delay < 0 || delay < ti.interval {
 		return 0, fmt.Errorf(ERR_DELAY_LESS_INTERVAL, delay, ti.interval)
 	}
-	ti.mutex.Lock()
-	defer ti.mutex.Unlock()
 
+	if !ti.wheel.CheckDelay(delay) {
+		return 0, fmt.Errorf(ERR_DELAY_EXCEEDS)
+	}
+
+	ti.mutex.Lock()
 	ti.currentTaskId.Add(1)
 	taskID := TaskID(ti.currentTaskId.Load())
 	scheduleTime := time.Now().UTC().Add(delay)
@@ -56,20 +65,20 @@ func (ti *timingWheel) AddTask(delay time.Duration, executor Executor) (TaskID, 
 		executor:     executor,
 		scheduleTime: scheduleTime.UnixMilli(),
 	}
+	defer ti.mutex.Unlock()
 
-	err := ti.wheel.AddTask(taskObj)
-	if err != nil {
-		return 0, err
-	}
+	ti.addTaskCh <- taskObj
 	return taskID, nil
 }
 
 func (ti *timingWheel) RemoveTask(id TaskID) {
-
-}
-
-func (ti *timingWheel) ExecQueue() chan Executor {
-	return ti.execQueueCh
+	if id < 1 {
+		return
+	}
+	if _, ok := ti.taskMap[id]; !ok {
+		return
+	}
+	ti.removeTaskCh <- id
 }
 
 // Create a new wheel to attach to the tail of the wheel.
@@ -100,11 +109,19 @@ func (ti *timingWheel) Stop() {
 	ti.stopCh <- struct{}{}
 }
 
+func (ti *timingWheel) ExecQueue() chan Executor {
+	return ti.execTaskCh
+}
+
 func (ti *timingWheel) run() {
 	for {
 		select {
 		case <-ti.ticker.C:
 			ti.onTick()
+		case task := <-ti.addTaskCh:
+			ti.addTask(task)
+		case tid := <-ti.removeTaskCh:
+			ti.removeTask(tid)
 		case <-ti.stopCh:
 			return
 		}
@@ -116,7 +133,8 @@ func (ti *timingWheel) onTick() {
 	tasks, nextTrigger := ti.wheel.Tick()
 	// Add the tasks that need to be executed to the queue.
 	for i := range tasks {
-		ti.execQueueCh <- tasks[i].executor
+		ti.execTaskCh <- tasks[i].executor
+		delete(ti.taskMap, tasks[i].taskId)
 	}
 
 	var next TriggerNextFunc
@@ -135,11 +153,20 @@ func (ti *timingWheel) onTick() {
 
 	// Add the edge tasks that need to be executed to the queue.
 	for i := range edgeTasks {
-		ti.execQueueCh <- edgeTasks[i].executor
+		ti.execTaskCh <- edgeTasks[i].executor
+		delete(ti.taskMap, edgeTasks[i].taskId)
 	}
-
 }
 
-func (ti *timingWheel) getTask(id TaskID) {
+func (ti *timingWheel) addTask(t *Task) {
+	ti.wheel.AddTask(t)
+	ti.taskMap[t.taskId] = t
+}
 
+func (ti *timingWheel) removeTask(tid TaskID) {
+	if task, ok := ti.taskMap[tid]; ok {
+		slot := task.slot
+		slot.RemoveFirst(task)
+		delete(ti.taskMap, task.taskId)
+	}
 }

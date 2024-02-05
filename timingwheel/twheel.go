@@ -1,7 +1,6 @@
 package timingwheel
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -46,16 +45,28 @@ func (t *tWheel) Tick() (taskList []*Task, nextTrigger TriggerNextFunc) {
 	return list.PopAll(), nil
 }
 
-func (t *tWheel) AddTask(task *Task) error {
-	if task.delay <= t.maxDelay {
-		pos := t.calculatePos(task.delay)
-		fmt.Printf("AddTask to %d, %d\n", pos, t.interval)
-		t.slots[pos].PushBack(task)
-		return nil
+func (t *tWheel) CheckDelay(delay time.Duration) bool {
+	if delay <= time.Duration(t.maxDelay) {
+		return true
 	}
 
 	if t.next == nil {
-		return fmt.Errorf(ERR_DELAY_EXCEEDS)
+		return false
+	}
+
+	return t.next.CheckDelay(delay)
+}
+
+func (t *tWheel) AddTask(task *Task) *Task {
+	if task.delay <= t.maxDelay {
+		pos := t.calculatePos(task.delay)
+		task.slot = t.slots[pos]
+		t.slots[pos].PushBack(task)
+		return task
+	}
+
+	if t.next == nil {
+		return nil
 	}
 
 	return t.next.AddTask(task)
