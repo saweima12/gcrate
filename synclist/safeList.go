@@ -5,18 +5,16 @@ import (
 	"sync"
 )
 
-type SafeList[T any] struct {
+type Equatable[T any] interface {
+	Equals(other T) bool
+}
+
+type SafeList[T Equatable[T]] struct {
 	mutex sync.Mutex
 	list  *clist.List
 }
 
-func New() *SafeList[interface{}] {
-	return &SafeList[interface{}]{
-		list: clist.New(),
-	}
-}
-
-func NewGeneric[T any]() *SafeList[T] {
+func New[T Equatable[T]]() *SafeList[T] {
 	return &SafeList[T]{
 		list: clist.New(),
 	}
@@ -91,6 +89,28 @@ func (tl *SafeList[T]) PopBack() (T, bool) {
 		return zero, false
 	}
 	return result, true
+}
+
+func (tl *SafeList[T]) RemoveFirst(t T) {
+	tl.mutex.Lock()
+	defer tl.mutex.Unlock()
+
+	node := tl.list.Front()
+	for {
+		if node == nil {
+			return
+		}
+
+		val, ok := node.Value.(T)
+		if !ok {
+			continue
+		}
+
+		if val.Equals(t) {
+			tl.list.Remove(node)
+		}
+		node = node.Next()
+	}
 }
 
 func (tl *SafeList[T]) remove(node *clist.Element) *clist.Element {
