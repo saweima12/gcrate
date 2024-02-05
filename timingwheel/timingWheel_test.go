@@ -23,13 +23,9 @@ func Test_TimingWheel(t *testing.T) {
 
 	r.Start()
 
-	taskID, _ := r.AddTask(time.Second*5+1000, &TestExecute{Name: "Hello1"})
-	task, _ := r.AddTask(time.Second*5, &TestExecute{Name: "Hello2"})
-	fmt.Println(taskID, task)
-
 	for {
 		select {
-		case executor := <-r.ExecQueue():
+		case executor := <-r.ExecCh():
 			executor.Execute()
 
 		case <-time.After(time.Second * 60):
