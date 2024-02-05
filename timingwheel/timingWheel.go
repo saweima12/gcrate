@@ -12,11 +12,14 @@ type Executor interface {
 }
 
 type TimingWheel interface {
-	Start()
-	Stop()
 	AddWheel(slotNum uint16) TimingWheel
 	AddTask(delay time.Duration, executor Executor) (TaskID, error)
-	ExecQueue() chan Executor
+	RemoveTask(id TaskID) error
+
+	Start()
+	Stop()
+	ExecCh() chan Executor
+	TaskCount() int
 }
 
 func New(interval time.Duration, bufSize int) TimingWheel {
@@ -38,12 +41,26 @@ type timingWheel struct {
 	ticker        *time.Ticker
 	currentTaskId atomic.Uint64
 	mutex         sync.Mutex
-	taskMap       map[TaskID]*Task
 
+	taskMap      map[TaskID]*Task
 	stopCh       chan struct{}
 	addTaskCh    chan *Task
 	execTaskCh   chan Executor
 	removeTaskCh chan TaskID
+}
+
+func (ti *timingWheel) AddWheel(slotNum uint16) TimingWheel {
+	if ti.wheel == nil {
+		ti.wheel = newWheel(slotNum, int64(ti.interval))
+		return ti
+	}
+
+	target := ti.wheel
+	for target.next != nil {
+		target = target.next
+	}
+	target.next = newWheel(slotNum, target.interval*int64(target.slotNum))
+	return ti
 }
 
 func (ti *timingWheel) AddTask(delay time.Duration, executor Executor) (TaskID, error) {
@@ -71,30 +88,18 @@ func (ti *timingWheel) AddTask(delay time.Duration, executor Executor) (TaskID, 
 	return taskID, nil
 }
 
-func (ti *timingWheel) RemoveTask(id TaskID) {
+func (ti *timingWheel) RemoveTask(id TaskID) error {
 	if id < 1 {
-		return
+		return fmt.Errorf(ERR_ID_NOT_AVALIABLE, id)
 	}
 	if _, ok := ti.taskMap[id]; !ok {
-		return
+		return fmt.Errorf(ERR_NOT_FOUND, id)
 	}
 	ti.removeTaskCh <- id
+	return nil
 }
 
 // Create a new wheel to attach to the tail of the wheel.
-func (ti *timingWheel) AddWheel(slotNum uint16) TimingWheel {
-	if ti.wheel == nil {
-		ti.wheel = newWheel(slotNum, int64(ti.interval))
-		return ti
-	}
-
-	target := ti.wheel
-	for target.next != nil {
-		target = target.next
-	}
-	target.next = newWheel(slotNum, target.interval*int64(target.slotNum))
-	return ti
-}
 
 func (ti *timingWheel) Start() {
 	if ti.wheel == nil {
@@ -109,8 +114,12 @@ func (ti *timingWheel) Stop() {
 	ti.stopCh <- struct{}{}
 }
 
-func (ti *timingWheel) ExecQueue() chan Executor {
+func (ti *timingWheel) ExecCh() chan Executor {
 	return ti.execTaskCh
+}
+
+func (ti *timingWheel) TaskCount() int {
+	return len(ti.taskMap)
 }
 
 func (ti *timingWheel) run() {
@@ -123,6 +132,7 @@ func (ti *timingWheel) run() {
 		case tid := <-ti.removeTaskCh:
 			ti.removeTask(tid)
 		case <-ti.stopCh:
+			ti.ticker.Stop()
 			return
 		}
 	}
