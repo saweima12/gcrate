@@ -69,13 +69,11 @@ func (t *tWheel) triggerNext() (extTasks []*Task, nextTrigger TriggerNextFunc) {
 
 	result := make([]*Task, 0)
 	taskList, next := t.next.Tick()
-	fmt.Println("triggerNext")
 
 	now := time.Now().UTC().UnixMilli()
 
 	for i := range taskList {
 		offset := (taskList[i].scheduleTime - now) * int64(time.Millisecond)
-		fmt.Println(offset)
 		if offset <= t.interval {
 			result = append(result, taskList[i])
 			continue
