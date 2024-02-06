@@ -1,4 +1,4 @@
-package timingwheel
+package tickwheel
 
 const (
 	ERR_DELAY_EXCEEDS       = "ERROR: The delay time exceeds the maximum value."

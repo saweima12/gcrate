@@ -1,11 +1,11 @@
-package timingwheel_test
+package tickwheel_test
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/saweima12/gcrate/timingwheel"
+	"github.com/saweima12/gcrate/tickwheel"
 )
 
 type TestExecute struct {
@@ -17,7 +17,7 @@ func (te *TestExecute) Execute() {
 }
 
 func TestTimingWheel(t *testing.T) {
-	r := timingwheel.New(time.Second/2, 100).
+	r := tickwheel.New(time.Second/2, 100).
 		AddWheel(10).
 		AddWheel(10)
 

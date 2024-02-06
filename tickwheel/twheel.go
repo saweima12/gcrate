@@ -1,4 +1,4 @@
-package timingwheel
+package tickwheel
 
 import (
 	"sync/atomic"
