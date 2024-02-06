@@ -55,7 +55,21 @@ type ShardMap[K comparable, V any] struct {
 }
 
 func (sm *ShardMap[K, V]) Length() int {
+	total := 0
+	for i := range sm.shards {
+		total += len(sm.shards[i].items)
+	}
+	return total
+}
 
+func (sm *ShardMap[K, V]) Exists(key K) bool {
+	index := sm.shardingFunc(key) % uint32(sm.shardNum)
+	shard := sm.shards[index]
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	_, ok := shard.items[key]
+	return ok
 }
 
 func (sm *ShardMap[K, V]) Get(key K) (value V, ok bool) {
