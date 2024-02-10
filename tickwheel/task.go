@@ -1,4 +1,4 @@
-package timingwheel
+package tickwheel
 
 import (
 	core "github.com/saweima12/gcrate/synclist"

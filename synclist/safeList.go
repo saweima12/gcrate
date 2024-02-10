@@ -5,16 +5,12 @@ import (
 	"sync"
 )
 
-type Equatable[T any] interface {
-	Equals(other T) bool
-}
-
-type SafeList[T Equatable[T]] struct {
+type SafeList[T comparable] struct {
 	mutex sync.Mutex
 	list  *clist.List
 }
 
-func New[T Equatable[T]]() *SafeList[T] {
+func New[T comparable]() *SafeList[T] {
 	return &SafeList[T]{
 		list: clist.New(),
 	}
@@ -106,7 +102,7 @@ func (tl *SafeList[T]) RemoveFirst(t T) {
 			continue
 		}
 
-		if val.Equals(t) {
+		if val == t {
 			tl.list.Remove(node)
 		}
 		node = node.Next()

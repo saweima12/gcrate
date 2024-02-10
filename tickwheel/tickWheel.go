@@ -1,4 +1,4 @@
-package timingwheel
+package tickwheel
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ type Executor interface {
 	Execute()
 }
 
-type TimingWheel interface {
-	AddWheel(slotNum uint16) TimingWheel
+type TickWheel interface {
+	AddWheel(slotNum uint16) TickWheel
 	AddTask(delay time.Duration, executor Executor) (TaskID, error)
 	RemoveTask(id TaskID) error
 
@@ -22,8 +22,8 @@ type TimingWheel interface {
 	TaskCount() int
 }
 
-func New(interval time.Duration, bufSize int) TimingWheel {
-	result := &timingWheel{
+func New(interval time.Duration, bufSize int) TickWheel {
+	result := &tickWheel{
 		interval:     interval,
 		taskMap:      make(map[TaskID]*Task),
 		stopCh:       make(chan struct{}, 1),
@@ -35,7 +35,7 @@ func New(interval time.Duration, bufSize int) TimingWheel {
 	return result
 }
 
-type timingWheel struct {
+type tickWheel struct {
 	interval      time.Duration
 	wheel         *tWheel
 	ticker        *time.Ticker
@@ -49,7 +49,7 @@ type timingWheel struct {
 	removeTaskCh chan TaskID
 }
 
-func (ti *timingWheel) AddWheel(slotNum uint16) TimingWheel {
+func (ti *tickWheel) AddWheel(slotNum uint16) TickWheel {
 	if ti.wheel == nil {
 		ti.wheel = newWheel(slotNum, int64(ti.interval))
 		return ti
@@ -59,11 +59,11 @@ func (ti *timingWheel) AddWheel(slotNum uint16) TimingWheel {
 	for target.next != nil {
 		target = target.next
 	}
-	target.next = newWheel(slotNum, target.interval*int64(target.slotNum))
+	target.next = newWheel(slotNum, target.tickDur*int64(target.slotNum))
 	return ti
 }
 
-func (ti *timingWheel) AddTask(delay time.Duration, executor Executor) (TaskID, error) {
+func (ti *tickWheel) AddTask(delay time.Duration, executor Executor) (TaskID, error) {
 	if delay < 0 || delay < ti.interval {
 		return 0, fmt.Errorf(ERR_DELAY_LESS_INTERVAL, delay, ti.interval)
 	}
@@ -88,7 +88,7 @@ func (ti *timingWheel) AddTask(delay time.Duration, executor Executor) (TaskID, 
 	return taskID, nil
 }
 
-func (ti *timingWheel) RemoveTask(id TaskID) error {
+func (ti *tickWheel) RemoveTask(id TaskID) error {
 	if id < 1 {
 		return fmt.Errorf(ERR_ID_NOT_AVALIABLE, id)
 	}
@@ -101,7 +101,7 @@ func (ti *timingWheel) RemoveTask(id TaskID) error {
 
 // Create a new wheel to attach to the tail of the wheel.
 
-func (ti *timingWheel) Start() {
+func (ti *tickWheel) Start() {
 	if ti.wheel == nil {
 		return
 	}
@@ -110,19 +110,19 @@ func (ti *timingWheel) Start() {
 	go ti.run()
 }
 
-func (ti *timingWheel) Stop() {
+func (ti *tickWheel) Stop() {
 	ti.stopCh <- struct{}{}
 }
 
-func (ti *timingWheel) ExecCh() chan Executor {
+func (ti *tickWheel) ExecCh() chan Executor {
 	return ti.execTaskCh
 }
 
-func (ti *timingWheel) TaskCount() int {
+func (ti *tickWheel) TaskCount() int {
 	return len(ti.taskMap)
 }
 
-func (ti *timingWheel) run() {
+func (ti *tickWheel) run() {
 	for {
 		select {
 		case <-ti.ticker.C:
@@ -138,8 +138,7 @@ func (ti *timingWheel) run() {
 	}
 }
 
-func (ti *timingWheel) onTick() {
-
+func (ti *tickWheel) onTick() {
 	tasks, nextTrigger := ti.wheel.Tick()
 	// Add the tasks that need to be executed to the queue.
 	for i := range tasks {
@@ -168,12 +167,12 @@ func (ti *timingWheel) onTick() {
 	}
 }
 
-func (ti *timingWheel) addTask(t *Task) {
+func (ti *tickWheel) addTask(t *Task) {
 	ti.wheel.AddTask(t)
 	ti.taskMap[t.taskId] = t
 }
 
-func (ti *timingWheel) removeTask(tid TaskID) {
+func (ti *tickWheel) removeTask(tid TaskID) {
 	if task, ok := ti.taskMap[tid]; ok {
 		slot := task.slot
 		slot.RemoveFirst(task)
