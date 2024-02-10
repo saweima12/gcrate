@@ -62,16 +62,6 @@ func (sm *ShardMap[K, V]) Length() int {
 	return total
 }
 
-func (sm *ShardMap[K, V]) Exists(key K) bool {
-	index := sm.shardingFunc(key) % uint32(sm.shardNum)
-	shard := sm.shards[index]
-
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	_, ok := shard.items[key]
-	return ok
-}
-
 func (sm *ShardMap[K, V]) Get(key K) (value V, ok bool) {
 	index := sm.shardingFunc(key) % uint32(sm.shardNum)
 	shard := sm.shards[index]
@@ -90,6 +80,15 @@ func (sm *ShardMap[K, V]) Set(key K, value V) {
 	defer shard.mu.Unlock()
 	shard.items[key] = value
 	sm.length++
+}
+
+func (sm *ShardMap[K, V]) Remove(key K) {
+	index := sm.shardingFunc(key) % uint32(sm.shardNum)
+	shard := sm.shards[index]
+
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	delete(shard.items, key)
 }
 
 // recommend number.

@@ -7,8 +7,8 @@ import (
 
 type tWheel struct {
 	slots      []*TaskList
+	tickDur    int64
 	interval   int64
-	maxDelay   int64
 	slotNum    uint16
 	currentPos atomic.Uint32
 	next       *tWheel
@@ -16,11 +16,11 @@ type tWheel struct {
 
 type TriggerNextFunc func() ([]*Task, TriggerNextFunc)
 
-func newWheel(slotNum uint16, interval int64) *tWheel {
+func newWheel(slotNum uint16, tickDur int64) *tWheel {
 	result := &tWheel{
 		slotNum:  slotNum,
-		interval: interval,
-		maxDelay: interval * int64(slotNum),
+		tickDur:  tickDur,
+		interval: tickDur * int64(slotNum),
 		slots:    make([]*TaskList, slotNum),
 	}
 
@@ -46,7 +46,7 @@ func (t *tWheel) Tick() (taskList []*Task, nextTrigger TriggerNextFunc) {
 }
 
 func (t *tWheel) CheckDelay(delay time.Duration) bool {
-	if delay <= time.Duration(t.maxDelay) {
+	if delay <= time.Duration(t.interval) {
 		return true
 	}
 
@@ -58,7 +58,7 @@ func (t *tWheel) CheckDelay(delay time.Duration) bool {
 }
 
 func (t *tWheel) AddTask(task *Task) *Task {
-	if task.delay <= t.maxDelay {
+	if task.delay <= t.interval {
 		pos := t.calculatePos(task.delay)
 		task.slot = t.slots[pos]
 		t.slots[pos].PushBack(task)
@@ -85,7 +85,7 @@ func (t *tWheel) triggerNext() (extTasks []*Task, nextTrigger TriggerNextFunc) {
 
 	for i := range taskList {
 		offset := (taskList[i].scheduleTime - now) * int64(time.Millisecond)
-		if offset <= t.interval {
+		if offset <= t.tickDur {
 			result = append(result, taskList[i])
 			continue
 		}
@@ -97,6 +97,6 @@ func (t *tWheel) triggerNext() (extTasks []*Task, nextTrigger TriggerNextFunc) {
 }
 
 func (t *tWheel) calculatePos(delay int64) int {
-	blockNum := delay / t.interval
+	blockNum := delay / t.tickDur
 	return int(t.currentPos.Load()+uint32(blockNum)) % int(t.slotNum)
 }
