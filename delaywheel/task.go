@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+// Executor contains an Execute() method,
+// > where TaskCtx is passed in to obtain the relevant parameters of the current task.
 type Executor interface {
 	Execute(task *TaskCtx)
 }
@@ -57,14 +59,18 @@ type Task struct {
 	bucket   *bucket
 }
 
+// Get the taskID
 func (dt *Task) TaskID() uint64 {
 	return dt.taskID
 }
 
+// Get the task expiration.
 func (dt *Task) Expiration() int64 {
 	return dt.expiration
 }
 
+// Execute the task;
+// Notice: The task will self-recycle and clear relevant data after execution.
 func (dt *Task) Execute() {
 	ctx := dt.ctxPool.Get(dt)
 	dt.executor.Execute(ctx)
@@ -75,9 +81,9 @@ func (dt *Task) Execute() {
 	if !isSchedule {
 		dt.taskPool.Put(dt)
 	}
-
 }
 
+// Create a simple executor function wrapper.
 func pureExec(f func(task *TaskCtx)) *pureExecutor {
 	return &pureExecutor{
 		f: f,
@@ -92,6 +98,7 @@ func (we *pureExecutor) Execute(task *TaskCtx) {
 	we.f(task)
 }
 
+// A simple schedule
 type pureScheduler struct {
 	d time.Duration
 }
