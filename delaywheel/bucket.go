@@ -3,19 +3,19 @@ package delaywheel
 import (
 	"sync/atomic"
 
-	"github.com/saweima12/gcrate/pqueue"
+	"github.com/saweima12/gcrate/list"
 )
-
-type Bucket interface {
-	pqueue.Delayer
-}
 
 type bucket struct {
 	expiration int64
+	tasks      *list.SyncList[*Task]
 }
 
-func NewBucket() Bucket {
-	return &bucket{}
+func newBucket() *bucket {
+	return &bucket{
+		expiration: -1,
+		tasks:      list.NewSync[*Task](),
+	}
 }
 
 func (bu *bucket) SetExpiration(d int64) bool {
@@ -24,4 +24,10 @@ func (bu *bucket) SetExpiration(d int64) bool {
 
 func (bu *bucket) Expiration() int64 {
 	return atomic.LoadInt64(&bu.expiration)
+}
+
+func (bu *bucket) AddTask(task *Task) {
+	elm := bu.tasks.PushBack(task)
+	task.elm = elm
+	task.bucket = bu
 }
