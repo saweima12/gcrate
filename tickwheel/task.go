@@ -1,7 +1,7 @@
 package tickwheel
 
 import (
-	core "github.com/saweima12/gcrate/synclist"
+	core "github.com/saweima12/gcrate/list"
 )
 
 type TaskID uint64
@@ -19,11 +19,11 @@ func (ta *Task) Equals(other *Task) bool {
 }
 
 type TaskList struct {
-	core.SafeList[*Task]
+	core.SyncList[*Task]
 }
 
 func NewTaskList() *TaskList {
 	return &TaskList{
-		SafeList: *core.New[*Task](),
+		SyncList: *core.NewSync[*Task](),
 	}
 }

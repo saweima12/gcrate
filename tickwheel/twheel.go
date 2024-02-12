@@ -23,7 +23,6 @@ func newWheel(slotNum uint16, tickDur int64) *tWheel {
 		interval: tickDur * int64(slotNum),
 		slots:    make([]*TaskList, slotNum),
 	}
-
 	result.currentPos.Store(0)
 	// Initialize each slots.
 	for i := range result.slots {
