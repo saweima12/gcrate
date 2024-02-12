@@ -71,10 +71,12 @@ type DelayWheel struct {
 	stopCh     chan struct{}
 }
 
+// Start the delaywheel.
 func (de *DelayWheel) Start() {
 	go de.run()
 }
 
+// Send a stop signal to delaywheel
 func (de *DelayWheel) Stop() {
 	de.stopCh <- struct{}{}
 }
@@ -83,6 +85,7 @@ func (de *DelayWheel) ExecTaskCh() <-chan *Task {
 	return de.execTaskCh
 }
 
+// Submit a delayed execution of a function.
 func (de *DelayWheel) AfterFunc(d time.Duration, f func(task *TaskCtx)) {
 	de.mu.Lock()
 	defer de.mu.Unlock()
@@ -92,6 +95,7 @@ func (de *DelayWheel) AfterFunc(d time.Duration, f func(task *TaskCtx)) {
 	de.addTaskCh <- t
 }
 
+// Submit a delayed execution of a executor.
 func (de *DelayWheel) AfterExecute(d time.Duration, executor Executor) {
 	de.mu.Lock()
 	defer de.mu.Unlock()
@@ -102,6 +106,7 @@ func (de *DelayWheel) AfterExecute(d time.Duration, executor Executor) {
 	de.addTaskCh <- t
 }
 
+// Schedule a delayed execution of a function with a time interval.
 func (de *DelayWheel) ScheduleFunc(d time.Duration, f func(ctx *TaskCtx)) {
 	de.mu.Lock()
 	defer de.mu.Unlock()
@@ -123,6 +128,7 @@ func (de *DelayWheel) ScheduleFunc(d time.Duration, f func(ctx *TaskCtx)) {
 	de.addTaskCh <- t
 }
 
+// Schedule a delayed execution of a executor with a time interval.
 func (de *DelayWheel) ScheduleExecute(d time.Duration, executor Executor) {
 	de.mu.Lock()
 	defer de.mu.Unlock()
@@ -144,6 +150,7 @@ func (de *DelayWheel) ScheduleExecute(d time.Duration, executor Executor) {
 	de.addTaskCh <- t
 }
 
+// Advance the timing wheel to a specified time point.
 func (de *DelayWheel) AdvanceClock(expiration int64) {
 	if expiration < de.curTime.Load() {
 		// if the expiration is less than current, ignore it.

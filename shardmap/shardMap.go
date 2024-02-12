@@ -36,15 +36,16 @@ func createMap[K comparable, V any](f ShardingFunc[K], opts ...Option[K, V]) *Sh
 	return resp
 }
 
+// Create a ShardMap with string as the key.
 func New[V any](opts ...Option[string, V]) *ShardMap[string, V] {
 	return createMap[string, V](fnv32, opts...)
 }
 
+// Create a ShardMap where the key can be any struct implementing the String() method.
 func NewStringer[K Stringer, V any](opts ...Option[K, V]) *ShardMap[K, V] {
 	return createMap[K, V](strFnv32, opts...)
 }
 
-// Hello
 type ShardingFunc[K comparable] func(key K) uint32
 type ShardMap[K comparable, V any] struct {
 	shardNum     uint8
@@ -62,6 +63,7 @@ func (sm *ShardMap[K, V]) Length() int {
 	return total
 }
 
+// Load returns the value stored the map for a key or nil, if no value is present.
 func (sm *ShardMap[K, V]) Get(key K) (value V, ok bool) {
 	index := sm.shardingFunc(key) % uint32(sm.shardNum)
 	shard := sm.shards[index]
@@ -72,6 +74,7 @@ func (sm *ShardMap[K, V]) Get(key K) (value V, ok bool) {
 	return val, ok
 }
 
+// Set the value for a key.
 func (sm *ShardMap[K, V]) Set(key K, value V) {
 	index := sm.shardingFunc(key) % uint32(sm.shardNum)
 	shard := sm.shards[index]
@@ -93,10 +96,10 @@ func (sm *ShardMap[K, V]) Remove(key K) {
 
 // recommend number.
 const FNV_BASIS = uint32(2166136261)
-const FNV_PRIME = uint32(16777619)
 
 // FNV-1a algorithm
 func fnv32(key string) uint32 {
+	const FNV_PRIME = uint32(16777619)
 	nhash := FNV_BASIS
 	for i := 0; i < len(key); i++ {
 		nhash ^= uint32(key[i])
