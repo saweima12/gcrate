@@ -11,7 +11,7 @@ type Delayer interface {
 
 type DelayQueue[T Delayer] interface {
 	Offer(item T)
-	Poll() T
+	ExpiredCh() <-chan T
 	Len() int
 	Start()
 	Stop()
@@ -51,8 +51,8 @@ func (dq *delayQueue[T]) Offer(item T) {
 	dq.offerCh <- item
 }
 
-func (dq *delayQueue[T]) Poll() T {
-	return <-dq.expireCh
+func (dq *delayQueue[T]) ExpiredCh() <-chan T {
+	return dq.expireCh
 }
 
 func (dq *delayQueue[T]) Len() int {
@@ -97,23 +97,20 @@ func (dq *delayQueue[T]) handleOffer(item T) {
 }
 
 func (dq *delayQueue[T]) handleTimeout() {
+	now := dq.nowFunc()
 
-	// take the earliest item
-	topExp := dq.pq.Peek().Expiration()
-	if dq.nowFunc() < topExp {
-		// if current time earlier than task time, reset timer & return.
-		dq.refreshTimer(topExp)
-		return
+	for dq.pq.Len() > 0 {
+		// take the earliest item
+		topExp := dq.pq.Peek().Expiration()
+		if now < topExp {
+			// if current time earlier than task time, reset timer & return.
+			dq.refreshTimer(topExp)
+			return
+		}
+		// refershTimer.
+		expired := dq.pq.Pop()
+		dq.expireCh <- expired
 	}
-
-	expired := dq.pq.Pop()
-	dq.expireCh <- expired
-	if dq.pq.Len() < 1 {
-		return
-	}
-	// refershTimer.
-	topExp = dq.pq.Peek().Expiration()
-	dq.refreshTimer(topExp)
 }
 
 func (dq *delayQueue[T]) refreshTimer(expireTime int64) {
@@ -125,7 +122,7 @@ func (dq *delayQueue[T]) refreshTimer(expireTime int64) {
 		}
 	}
 
-	delta := dq.nowFunc() - expireTime
+	delta := expireTime - dq.nowFunc()
 	dq.t.Reset(time.Duration(delta))
 }
 

@@ -23,6 +23,7 @@ func (te *TestDelayerItem) Expiration() int64 {
 }
 
 func TestDelayQueue(t *testing.T) {
+	fmt.Println("==Start to test DelayQueue==")
 	dq := pqueue.NewDelayQueue[*TestDelayerItem](func() int64 {
 		return timeToMs(time.Now().UTC())
 	}, 64)
@@ -33,10 +34,17 @@ func TestDelayQueue(t *testing.T) {
 	dq.Offer(&nb)
 	dq.Offer(&nb2)
 
-	for i := dq.Len(); i > 0; i-- {
-		fmt.Println(dq.Poll())
+	for dq.Len() > 0 {
+		fmt.Println(Poll(dq.ExpiredCh()))
 	}
 
+}
+
+func Poll(ch <-chan *TestDelayerItem) *TestDelayerItem {
+	select {
+	case item := <-ch:
+		return item
+	}
 }
 
 // timeToMs returns an integer number, which represents t in milliseconds.
