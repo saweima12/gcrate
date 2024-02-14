@@ -22,8 +22,8 @@ type KVShardBlock[K comparable, V any] struct {
 	mu    sync.Mutex
 }
 
-func createMap[K comparable, V any](f ShardingFunc[K], opts ...Option[K, V]) *ShardMap[K, V] {
-	resp := &ShardMap[K, V]{
+func createMap[K comparable, V any](f ShardingFunc[K], opts ...Option[K, V]) *Map[K, V] {
+	resp := &Map[K, V]{
 		shardNum:     SHARD_DEFAULT,
 		shardingFunc: f,
 	}
@@ -42,21 +42,21 @@ func createMap[K comparable, V any](f ShardingFunc[K], opts ...Option[K, V]) *Sh
 }
 
 // Create a ShardMap with string as the key.
-func New[V any](opts ...Option[string, V]) *ShardMap[string, V] {
+func New[V any](opts ...Option[string, V]) *Map[string, V] {
 	return createMap[string, V](strFnv32, opts...)
 }
 
-func NewNum[K NumTypes, V any](opts ...Option[K, V]) *ShardMap[K, V] {
+func NewNum[K NumTypes, V any](opts ...Option[K, V]) *Map[K, V] {
 	return createMap[K, V](numFnv32[K], opts...)
 }
 
 // Create a ShardMap where the key can be any struct implementing the String() method.
-func NewStringer[K Stringer, V any](opts ...Option[K, V]) *ShardMap[K, V] {
+func NewStringer[K Stringer, V any](opts ...Option[K, V]) *Map[K, V] {
 	return createMap[K, V](stringerFnv32, opts...)
 }
 
 type ShardingFunc[K comparable] func(key K) uint32
-type ShardMap[K comparable, V any] struct {
+type Map[K comparable, V any] struct {
 	shardNum     uint32
 	shardingFunc ShardingFunc[K]
 	shards       []*KVShardBlock[K, V]
@@ -64,7 +64,7 @@ type ShardMap[K comparable, V any] struct {
 	length int
 }
 
-func (sm *ShardMap[K, V]) Length() int {
+func (sm *Map[K, V]) Length() int {
 	total := 0
 	for i := range sm.shards {
 		total += len(sm.shards[i].items)
@@ -73,7 +73,7 @@ func (sm *ShardMap[K, V]) Length() int {
 }
 
 // Load returns the value stored the map for a key or nil, if no value is present.
-func (sm *ShardMap[K, V]) Get(key K) (value V, ok bool) {
+func (sm *Map[K, V]) Get(key K) (value V, ok bool) {
 	index := sm.shardingFunc(key) % sm.shardNum
 	shard := sm.shards[index]
 
@@ -84,7 +84,7 @@ func (sm *ShardMap[K, V]) Get(key K) (value V, ok bool) {
 }
 
 // Set the value for a key.
-func (sm *ShardMap[K, V]) Set(key K, value V) {
+func (sm *Map[K, V]) Set(key K, value V) {
 	index := sm.shardingFunc(key) % sm.shardNum
 	shard := sm.shards[index]
 
@@ -94,7 +94,7 @@ func (sm *ShardMap[K, V]) Set(key K, value V) {
 	sm.length++
 }
 
-func (sm *ShardMap[K, V]) Remove(key K) {
+func (sm *Map[K, V]) Remove(key K) {
 	index := sm.shardingFunc(key) % sm.shardNum
 	shard := sm.shards[index]
 

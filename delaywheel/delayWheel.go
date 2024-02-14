@@ -71,7 +71,7 @@ type DelayWheel struct {
 	wheel    *tWheel
 	taskPool *taskPool
 	ctxPool  *ctxPool
-	taskMap  *shardmap.ShardMap[uint64, *Task]
+	taskMap  *shardmap.Map[uint64, *Task]
 	queue    pqueue.DelayQueue[*bucket]
 
 	execTaskCh    chan func()
