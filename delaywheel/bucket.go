@@ -1,6 +1,7 @@
 package delaywheel
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/saweima12/gcrate/list"
@@ -8,13 +9,14 @@ import (
 
 type bucket struct {
 	expiration int64
-	tasks      *list.SyncList[*Task]
+	tasks      *list.GenericList[*Task]
+	mu         sync.Mutex
 }
 
 func newBucket() *bucket {
 	return &bucket{
 		expiration: -1,
-		tasks:      list.NewSync[*Task](),
+		tasks:      list.NewGeneric[*Task](),
 	}
 }
 
@@ -27,7 +29,9 @@ func (bu *bucket) Expiration() int64 {
 }
 
 func (bu *bucket) AddTask(task *Task) {
+	bu.mu.Lock()
 	elm := bu.tasks.PushBack(task)
 	task.elm = elm
 	task.bucket = bu
+	bu.mu.Unlock()
 }
