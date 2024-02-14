@@ -1,6 +1,7 @@
 package shardmap
 
 import (
+	"encoding/binary"
 	"fmt"
 	"sync"
 )
@@ -10,6 +11,10 @@ const SHARD_DEFAULT = 32
 type Stringer interface {
 	fmt.Stringer
 	comparable
+}
+
+type KeyType[K any] interface {
+	string | NumTypes
 }
 
 type KVShardBlock[K comparable, V any] struct {
@@ -38,12 +43,16 @@ func createMap[K comparable, V any](f ShardingFunc[K], opts ...Option[K, V]) *Sh
 
 // Create a ShardMap with string as the key.
 func New[V any](opts ...Option[string, V]) *ShardMap[string, V] {
-	return createMap[string, V](fnv32, opts...)
+	return createMap[string, V](strFnv32, opts...)
+}
+
+func NewNum[K NumTypes, V any](opts ...Option[K, V]) *ShardMap[K, V] {
+	return createMap[K, V](numFnv32[K], opts...)
 }
 
 // Create a ShardMap where the key can be any struct implementing the String() method.
 func NewStringer[K Stringer, V any](opts ...Option[K, V]) *ShardMap[K, V] {
-	return createMap[K, V](strFnv32, opts...)
+	return createMap[K, V](stringerFnv32, opts...)
 }
 
 type ShardingFunc[K comparable] func(key K) uint32
@@ -98,7 +107,7 @@ func (sm *ShardMap[K, V]) Remove(key K) {
 const FNV_BASIS = uint32(2166136261)
 
 // FNV-1a algorithm
-func fnv32(key string) uint32 {
+func fnv32(key []byte) uint32 {
 	const FNV_PRIME = uint32(16777619)
 	nhash := FNV_BASIS
 	for i := 0; i < len(key); i++ {
@@ -109,6 +118,38 @@ func fnv32(key string) uint32 {
 }
 
 // Support someone who implement fmt.Stringer
-func strFnv32[K fmt.Stringer](key K) uint32 {
-	return fnv32(key.String())
+func stringerFnv32[K fmt.Stringer](key K) uint32 {
+	return fnv32([]byte(key.String()))
+}
+
+func strFnv32(key string) uint32 {
+	return fnv32([]byte(key))
+}
+
+type NumTypes interface {
+	int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64
+}
+
+func numFnv32[K NumTypes](key K) uint32 {
+	return fnv32(numToBytes[K](key))
+}
+
+func numToBytes[T NumTypes](value T) []byte {
+	switch any(value).(type) {
+	case int8, uint8:
+		return []byte{byte(value)}
+	case int16, uint16:
+		buf := make([]byte, 2)
+		binary.BigEndian.PutUint16(buf, uint16(value))
+		return buf
+	case int32, uint32:
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, uint32(value))
+		return buf
+	case int, uint, int64, uint64:
+		buf := make([]byte, 8)
+		binary.BigEndian.PutUint64(buf, uint64(value))
+		return buf
+	}
+	return nil
 }

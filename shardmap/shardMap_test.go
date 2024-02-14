@@ -46,6 +46,17 @@ func TestStringer(t *testing.T) {
 	}
 }
 
+func TestNum(t *testing.T) {
+	nm := shardmap.NewNum[uint32, int]()
+	nm.Set(8, 10)
+
+	val, ok := nm.Get(8)
+	if val != 10 || !ok {
+		t.Errorf("The val must be 10.")
+		return
+	}
+}
+
 func TestShardMap(t *testing.T) {
 	nm := shardmap.NewStringer[*TestKeyItem, *TestValueItem]()
 
