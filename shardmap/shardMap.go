@@ -107,7 +107,7 @@ func (sm *ShardMap[K, V]) Remove(key K) {
 const FNV_BASIS = uint32(2166136261)
 
 // FNV-1a algorithm
-func fnv32(key []byte) uint32 {
+func fnv32[T string | []byte](key T) uint32 {
 	const FNV_PRIME = uint32(16777619)
 	nhash := FNV_BASIS
 	for i := 0; i < len(key); i++ {
@@ -119,11 +119,11 @@ func fnv32(key []byte) uint32 {
 
 // Support someone who implement fmt.Stringer
 func stringerFnv32[K fmt.Stringer](key K) uint32 {
-	return fnv32([]byte(key.String()))
+	return fnv32(key.String())
 }
 
 func strFnv32(key string) uint32 {
-	return fnv32([]byte(key))
+	return fnv32(key)
 }
 
 type NumTypes interface {
