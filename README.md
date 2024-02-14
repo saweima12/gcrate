@@ -20,5 +20,9 @@ Avoid panics caused by concurrent read/write operations on maps while minimizing
 ### DataStructure
 
 - [list]
-  - GerenicList
+  - GenericList
   - SyncList
+
+- [pqueue]
+  - ProiorityQueue
+  - DelayQueue
