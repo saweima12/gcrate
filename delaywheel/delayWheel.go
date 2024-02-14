@@ -75,6 +75,7 @@ type DelayWheel struct {
 	queue    pqueue.DelayQueue[*bucket]
 
 	execTaskCh    chan func()
+	cancelTaskCh  chan uint64
 	addTaskCh     chan *Task
 	recycleTaskCh chan *Task
 	stopCh        chan struct{}
@@ -150,16 +151,8 @@ func (de *DelayWheel) ScheduleExecute(d time.Duration, executor Executor) uint64
 	return t.taskID
 }
 
-// Advance the timing wheel to a specified time point.
-func (de *DelayWheel) AdvanceClock(expiration int64) {
-	if expiration < de.curTime.Load() {
-		// if the expiration is less than current, ignore it.
-		return
-	}
-
-	// update currentTime
-	de.curTime.Store(expiration)
-	de.wheel.advanceClock(expiration)
+func (de *DelayWheel) CancelTask(taskID uint64) {
+	de.cancelTaskCh <- taskID
 }
 
 func (de *DelayWheel) run() {
@@ -173,6 +166,8 @@ func (de *DelayWheel) run() {
 			de.handleExipredBucket(bu)
 		case task := <-de.recycleTaskCh:
 			de.recycleTask(task)
+		case taskID := <-de.cancelTaskCh:
+			de.cancelTask(taskID)
 		case <-de.stopCh:
 			de.queue.Stop()
 			return
@@ -180,9 +175,21 @@ func (de *DelayWheel) run() {
 	}
 }
 
+// Advance the timing wheel to a specified time point.
+func (de *DelayWheel) advanceClock(expiration int64) {
+	if expiration < de.curTime.Load() {
+		// if the expiration is less than current, ignore it.
+		return
+	}
+
+	// update currentTime
+	de.curTime.Store(expiration)
+	de.wheel.advanceClock(expiration)
+}
+
 func (de *DelayWheel) handleExipredBucket(b *bucket) {
 	// Advance wheel's currentTime.
-	de.AdvanceClock(b.Expiration())
+	de.advanceClock(b.Expiration())
 
 	for {
 		// Extract all task
@@ -209,7 +216,7 @@ func (de *DelayWheel) add(task *Task) bool {
 	// if the expiration is exceeds the curInterval, expand the wheel.
 	if task.expiration > curTime+de.curInterval {
 		// When the wheel need be extended, advanceClock to now.
-		de.AdvanceClock(DefaultNow())
+		de.advanceClock(DefaultNow())
 		for task.expiration > curTime+de.curInterval {
 			de.expandWheel()
 		}
@@ -279,6 +286,14 @@ func (de *DelayWheel) createContext(t *Task) *TaskCtx {
 	ctx.t = t
 	ctx.taskCh = de.addTaskCh
 	return ctx
+}
+
+func (de *DelayWheel) cancelTask(taskID uint64) {
+	t, ok := de.taskMap.Get(taskID)
+	if !ok {
+		return
+	}
+	t.Cancel()
 }
 
 func (de *DelayWheel) recycleTask(t *Task) {
