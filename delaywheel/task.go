@@ -40,8 +40,6 @@ func (tp *taskPool) Put(t *Task) {
 	t.expiration = 0
 	t.executor = nil
 	t.isCancelled.Store(false)
-	t.taskPool = nil
-	t.ctxPool = nil
 	t.elm = nil
 	t.bucket = nil
 	tp.pool.Put(t)
@@ -53,10 +51,9 @@ type Task struct {
 	executor    Executor
 	isCancelled atomic.Bool
 
-	taskPool *taskPool
-	ctxPool  *ctxPool
-	elm      *list.Element
-	bucket   *bucket
+	de     *DelayWheel
+	elm    *list.Element
+	bucket *bucket
 }
 
 // Get the taskID
@@ -72,15 +69,19 @@ func (dt *Task) Expiration() int64 {
 // Execute the task;
 // Notice: The task will self-recycle and clear relevant data after execution.
 func (dt *Task) Execute() {
-	ctx := dt.ctxPool.Get(dt)
+	ctx := dt.de.createContext(dt)
 	dt.executor.Execute(ctx)
 
 	isSchedule := ctx.isSechuled
+	dt.de.recycleContext(ctx)
 
-	dt.ctxPool.Put(ctx)
 	if !isSchedule {
-		dt.taskPool.Put(dt)
+		dt.de.recycleTaskCh <- dt
 	}
+}
+
+func (dt *Task) Cancel() {
+	dt.isCancelled.Store(true)
 }
 
 // Create a simple executor function wrapper.

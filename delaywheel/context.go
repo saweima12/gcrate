@@ -8,7 +8,6 @@ import (
 
 type ctxPool struct {
 	pool sync.Pool
-	dw   *DelayWheel
 }
 
 func newCtxPool(dw *DelayWheel) *ctxPool {
@@ -18,27 +17,23 @@ func newCtxPool(dw *DelayWheel) *ctxPool {
 				return new(TaskCtx)
 			},
 		},
-		dw: dw,
 	}
 }
 
 func (c *ctxPool) Get(t *Task) *TaskCtx {
-	item := c.pool.Get().(*TaskCtx)
-	item.t = t
-	item.reSchedule = c.dw.addOrRun
-	return item
+	return c.pool.Get().(*TaskCtx)
 }
 
 func (c *ctxPool) Put(ctx *TaskCtx) {
 	ctx.t = nil
-	ctx.reSchedule = nil
+	ctx.taskCh = nil
 	ctx.isSechuled = false
 	c.pool.Put(ctx)
 }
 
 type TaskCtx struct {
-	t          *Task
-	reSchedule func(t *Task)
+	t      *Task
+	taskCh chan *Task
 
 	mu         sync.Mutex
 	isSechuled bool
@@ -73,7 +68,7 @@ func (ctx *TaskCtx) ReSchedule(d time.Duration) {
 	}
 	newExp := ctx.ExpireTime().Add(d)
 	atomic.SwapInt64(&ctx.t.expiration, timeToMs(newExp))
-	ctx.reSchedule(ctx.t)
-	ctx.isSechuled = true
 
+	ctx.taskCh <- ctx.t
+	ctx.isSechuled = true
 }
