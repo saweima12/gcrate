@@ -4,26 +4,29 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/saweima12/gcrate/delaywheel"
 )
 
-func TestAfterFunc(t *testing.T) {
+func TestAfterFuncAndAutoRun(t *testing.T) {
 	// Create delaywheel and start it.
-	dw, err := delaywheel.New(time.Millisecond, 20)
+	dw, err := delaywheel.New(
+		time.Millisecond, 20,
+		delaywheel.WithAutoRun(),
+	)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	dw.Start()
+	fmt.Println("delaywheel size:", unsafe.Sizeof(*dw))
 
 	dw.AfterFunc(time.Second, func(ctx *delaywheel.TaskCtx) {
-		fmt.Println("Hello")
+		fmt.Println("AutoRun: Hello")
 	})
 
-	item := <-dw.ExecTaskCh()
-	fmt.Println(item)
-	item.Execute()
+	<-time.After(time.Second * 5)
 }
 
 type TestExecutor struct {
@@ -46,9 +49,8 @@ func TestAfterExec(t *testing.T) {
 
 	dw.AfterExecute(time.Second, &TestExecutor{})
 
-	item := <-dw.ExecTaskCh()
-	fmt.Println(item)
-	item.Execute()
+	task := <-dw.ExecTaskCh()
+	task()
 }
 
 func TestScheduleFunc(t *testing.T) {
@@ -68,7 +70,7 @@ func TestScheduleFunc(t *testing.T) {
 	for {
 		select {
 		case item := <-dw.ExecTaskCh():
-			item.Execute()
+			item()
 			fmt.Println("point")
 		case <-limit.C:
 			fmt.Println("After")

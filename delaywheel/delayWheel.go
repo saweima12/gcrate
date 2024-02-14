@@ -2,7 +2,6 @@ package delaywheel
 
 import (
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,7 +12,7 @@ func DefaultNow() int64 {
 	return timeToMs(time.Now().UTC())
 }
 
-func New(tick time.Duration, wheelSize int) (*DelayWheel, error) {
+func New(tick time.Duration, wheelSize int, options ...Option) (*DelayWheel, error) {
 	startMs := timeToMs(time.Now().UTC())
 	tickMs := int64(tick) / int64(time.Millisecond)
 
@@ -27,6 +26,10 @@ func New(tick time.Duration, wheelSize int) (*DelayWheel, error) {
 		startMs,
 	)
 
+	for _, opt := range options {
+		opt(result)
+	}
+
 	return result, nil
 }
 
@@ -38,11 +41,12 @@ func create(tickMs int64, wheelSize int, startMs int64) *DelayWheel {
 		wheelSize:   wheelSize,
 		startMs:     startMs,
 		curInterval: initInterval,
+		autoRun:     false,
 
 		queue: pqueue.NewDelayQueue[*bucket](DefaultNow, wheelSize),
 		wheel: newWheel(tickMs, wheelSize, startMs),
 
-		execTaskCh: make(chan *Task, 1),
+		execTaskCh: make(chan func(), 1),
 		addTaskCh:  make(chan *Task, 1),
 		stopCh:     make(chan struct{}, 1),
 	}
@@ -59,14 +63,14 @@ type DelayWheel struct {
 	startMs     int64
 	curTime     atomic.Int64
 	curTaskID   atomic.Uint64
+	autoRun     bool
 
-	mu       sync.Mutex
 	wheel    *tWheel
 	taskPool *taskPool
 	ctxPool  *ctxPool
 	queue    pqueue.DelayQueue[*bucket]
 
-	execTaskCh chan *Task
+	execTaskCh chan func()
 	addTaskCh  chan *Task
 	stopCh     chan struct{}
 }
@@ -81,15 +85,12 @@ func (de *DelayWheel) Stop() {
 	de.stopCh <- struct{}{}
 }
 
-func (de *DelayWheel) ExecTaskCh() <-chan *Task {
+func (de *DelayWheel) ExecTaskCh() <-chan func() {
 	return de.execTaskCh
 }
 
 // Submit a delayed execution of a function.
 func (de *DelayWheel) AfterFunc(d time.Duration, f func(task *TaskCtx)) {
-	de.mu.Lock()
-	defer de.mu.Unlock()
-
 	t := de.createTask(d)
 	t.executor = pureExec(f)
 	de.addTaskCh <- t
@@ -97,22 +98,15 @@ func (de *DelayWheel) AfterFunc(d time.Duration, f func(task *TaskCtx)) {
 
 // Submit a delayed execution of a executor.
 func (de *DelayWheel) AfterExecute(d time.Duration, executor Executor) {
-	de.mu.Lock()
-	defer de.mu.Unlock()
-
 	t := de.createTask(d)
 	t.executor = executor
-
 	de.addTaskCh <- t
 }
 
 // Schedule a delayed execution of a function with a time interval.
 func (de *DelayWheel) ScheduleFunc(d time.Duration, f func(ctx *TaskCtx)) {
-	de.mu.Lock()
-	defer de.mu.Unlock()
-
+	// Create the task and wrpper auto reSchedul
 	t := de.createTask(d)
-
 	sch := pureScheduler{d: d}
 	t.executor = pureExec(func(ctx *TaskCtx) {
 		// Calculate new expiration.
@@ -130,9 +124,6 @@ func (de *DelayWheel) ScheduleFunc(d time.Duration, f func(ctx *TaskCtx)) {
 
 // Schedule a delayed execution of a executor with a time interval.
 func (de *DelayWheel) ScheduleExecute(d time.Duration, executor Executor) {
-	de.mu.Lock()
-	defer de.mu.Unlock()
-
 	t := de.createTask(d)
 
 	sch := pureScheduler{d: d}
@@ -233,7 +224,12 @@ func (de *DelayWheel) add(task *Task) bool {
 
 func (de *DelayWheel) addOrRun(task *Task) {
 	if !de.add(task) {
-		de.execTaskCh <- task
+		// If autoRun is enabled, It will directly start a goroutine for automatic execution.
+		if de.autoRun {
+			go task.Execute()
+			return
+		}
+		de.execTaskCh <- task.Execute
 	}
 }
 
@@ -252,9 +248,8 @@ func (de *DelayWheel) expandWheel() {
 }
 
 func (de *DelayWheel) createTask(d time.Duration) *Task {
-	nId := de.curTaskID.Add(1)
 	t := de.taskPool.Get()
-	t.taskID = nId
+	t.taskID = de.curTaskID.Add(1)
 	t.expiration = timeToMs(time.Now().UTC().Add(d))
 	t.ctxPool = de.ctxPool
 	t.taskPool = de.taskPool
