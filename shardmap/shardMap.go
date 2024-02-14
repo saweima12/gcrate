@@ -48,7 +48,7 @@ func NewStringer[K Stringer, V any](opts ...Option[K, V]) *ShardMap[K, V] {
 
 type ShardingFunc[K comparable] func(key K) uint32
 type ShardMap[K comparable, V any] struct {
-	shardNum     uint8
+	shardNum     uint32
 	shardingFunc ShardingFunc[K]
 	shards       []*KVShardBlock[K, V]
 
@@ -65,7 +65,7 @@ func (sm *ShardMap[K, V]) Length() int {
 
 // Load returns the value stored the map for a key or nil, if no value is present.
 func (sm *ShardMap[K, V]) Get(key K) (value V, ok bool) {
-	index := sm.shardingFunc(key) % uint32(sm.shardNum)
+	index := sm.shardingFunc(key) % sm.shardNum
 	shard := sm.shards[index]
 
 	shard.mu.Lock()
@@ -76,7 +76,7 @@ func (sm *ShardMap[K, V]) Get(key K) (value V, ok bool) {
 
 // Set the value for a key.
 func (sm *ShardMap[K, V]) Set(key K, value V) {
-	index := sm.shardingFunc(key) % uint32(sm.shardNum)
+	index := sm.shardingFunc(key) % sm.shardNum
 	shard := sm.shards[index]
 
 	shard.mu.Lock()
@@ -86,7 +86,7 @@ func (sm *ShardMap[K, V]) Set(key K, value V) {
 }
 
 func (sm *ShardMap[K, V]) Remove(key K) {
-	index := sm.shardingFunc(key) % uint32(sm.shardNum)
+	index := sm.shardingFunc(key) % sm.shardNum
 	shard := sm.shards[index]
 
 	shard.mu.Lock()

@@ -8,7 +8,7 @@ func WithCustomShardingFunc[K comparable, V any](f ShardingFunc[K]) Option[K, V]
 	}
 }
 
-func WithShardNum[K comparable, V any](num uint8) Option[K, V] {
+func WithShardNum[K comparable, V any](num uint32) Option[K, V] {
 	return func(m *ShardMap[K, V]) {
 		m.shardNum = num
 	}
